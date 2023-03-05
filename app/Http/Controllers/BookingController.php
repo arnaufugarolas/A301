@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Booking;
+use Carbon\Exceptions\InvalidDateException;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,64 +15,40 @@ class BookingController extends Controller
     {
         try {
             $bookings = Booking::all();
+
+            $jsonData = $bookings->map(function ($data) {
+                return [
+                    'id' => $data->id,
+                    'user_email' => $data->user->email,
+                    'start_date' => $data->start_date,
+                    'start_time' => $data->start_time,
+                    'end_date' => $data->end_date,
+                    'end_time' => $data->end_time,
+                ];
+            });
         } catch (Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
 
-        $jsonData = $bookings->map(function ($data) {
-            return [
-                'id' => $data->id,
-                'user' => $data->user->email,
-                'start_date' => $data->start_date,
-                'start_time' => $data->start_time,
-                'end_date' => $data->end_date,
-                'end_time' => $data->end_time,
-            ];
-        });
         return response()->json($jsonData, 200);
     }
 
     public function store(Request $request): JsonResponse
     {
         try {
-            $request->validate([
-                'start_date' => 'required|date',
-                'start_time' => 'required|date_format:H:i',
-                'end_date' => 'required|date',
-                'end_time' => 'required|date_format:H:i',
-                'user_id' => 'required|integer|exists:users,id',
-            ]);
+            $this->validateBookingRequest($request);
         } catch (Exception $e) {
             return response()->json(['error' => $e->getMessage()], 400);
         }
-
-
-        $hoursCollisions01 = Booking::where('start_date', '=', $request->start_date)
-            ->where('start_time', '>=', $request->start_time)
-            ->where('start_time', '<=', $request->end_time)->get();
-
-        $hoursCollisions02 = Booking::where('end_date', '=', $request->end_date)
-            ->where('end_time', '>=', $request->start_time)
-            ->where('end_time', '<=', $request->end_time)->get();
-
-        $hoursCollisions = $hoursCollisions01->merge($hoursCollisions02)->unique();
-
-        if ($hoursCollisions->count() > 0) {
-            return response()->json(['error' => 'There are hoursCollisions with other bookings'], 400);
+        try {
+            $collisions = $this->checkCollisions($request);
+        } catch (Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
 
-        $daysCollisions01 = Booking::where('start_date', '>', $request->start_date)
-            ->where('start_date', '<', $request->end_date)->get();
-        $daysCollisions02 = Booking::where('start_date', '<', $request->start_date)
-            ->where('end_date', '>', $request->start_date)->get();
-
-
-        $daysCollisions = $daysCollisions01->merge($daysCollisions02)->unique();
-
-        if ($daysCollisions->count() > 0) {
-            return response()->json(['error' => 'There are daysCollisions with other bookings'], 400);
+        if ($collisions) {
+            return response()->json(['error' => 'there are collisions with other bookings'], 400);
         }
-
 
         try {
             $booking = Booking::create($request->all());
@@ -82,20 +59,107 @@ class BookingController extends Controller
         return response()->json($booking, 201);
     }
 
+    /**
+     * @throws Exception
+     */
+    public function validateBookingRequest(Request $request): void
+    {
+        $request->validate([
+            'start_date' => 'required|date',
+            'start_time' => 'required|date_format:H:i',
+            'end_date' => 'required|date|after_or_equal:start_date',
+            'end_time' => 'required|date_format:H:i',
+            'user_id' => 'required|integer|exists:users,id',
+        ]);
+        if ($request->start_date === $request->end_date) {
+            $request->validate([
+                'end_time' => 'required|date_format:H:i|after:start_time',
+            ]);
+        }
+        if ((strtotime($request->start_time) - strtotime($request->end_time)) % 3600 !== 0) {
+            throw new InvalidDateException('start_time or end_time', 'the booking time must be multiple of one hour');
+        }
+    }
+
+    public function checkCollisions(Request $request)
+    {
+        $collisions = 0;
+
+        $collisions += count(Booking::where('start_date', '=', $request->start_date)
+            ->where('start_time', '<', $request->start_time)->get());
+        $collisions += count(Booking::where('start_date', '=', $request->start_date)
+            ->where('start_date', '=', $request->end_date)
+            ->where('start_time', '>=', $request->start_time)
+            ->where('start_time', '<=', $request->end_time)->get());
+        $collisions += count(Booking::where('start_date', '=', $request->start_date)
+            ->where('start_date', '<', $request->end_date)
+            ->get());
+        $collisions += count(Booking::where('end_date', '=', $request->start_date)
+            ->where('end_time', '>=', $request->start_time)->get());
+        $collisions += count(Booking::where('start_date', '>', $request->start_date)
+            ->where('start_date', '<', $request->end_date)->get());
+        $collisions += count(Booking::where('start_date', '<', $request->start_date)
+            ->where('end_date', '>', $request->start_date)->get());
+
+
+        return $collisions > 0;
+    }
+
     public function show(Booking $booking): JsonResponse
     {
-        return response()->json($booking, 200);
+        try {
+            $bookingToShow = [
+                'id' => $booking->id,
+                'user_email' => $booking->user->email,
+                'start_date' => $booking->start_date,
+                'start_time' => $booking->start_time,
+                'end_date' => $booking->end_date,
+                'end_time' => $booking->end_time,
+            ];
+        } catch (Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+        return response()->json($bookingToShow, 200);
     }
 
     public function update(Request $request, Booking $booking): JsonResponse
     {
-        $booking->update($request->all());
+        try {
+            $this->validateBookingRequest($request);
+        } catch (Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+
+        try {
+            $collisions = $this->checkCollisions($request);
+        } catch (Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+
+        if ($collisions) {
+            return response()->json(['error' => 'there are collisions with other bookings'], 400);
+        }
+
+        try {
+            $booking->update([
+                'start_date' => $request->start_date,
+                'start_time' => $request->start_time,
+                'end_date' => $request->end_date,
+                'end_time' => $request->end_time,
+            ]);
+        } catch (Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
         return response()->json($booking, 200);
     }
 
     public function destroy(Booking $booking): JsonResponse
     {
-        $booking->delete();
-        return response()->json(null, 204);
+        try {
+            $booking->delete();
+        } catch (Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+        return response()->json(['message' => 'Booking successfully deleted.'], 204);
     }
 }

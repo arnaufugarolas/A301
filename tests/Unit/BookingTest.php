@@ -13,63 +13,91 @@ class BookingTest extends TestCase
             'start_time' => '10:00',
             'end_date' => '2023-03-03',
             'end_time' => '12:00',
-            'result' => false
+            'result' => 201
+        ],
+        [
+            'start_date' => '2023-03-03',
+            'start_time' => '10:00',
+            'end_date' => '2023-03-03',
+            'end_time' => '09:00',
+            'result' => 400
+        ],
+        [
+            'start_date' => '2023-03-01',
+            'start_time' => '10:00',
+            'end_date' => '2023-03-13',
+            'end_time' => '12:00',
+            'result' => 400
         ],
         [
             'start_date' => '2023-03-04',
             'start_time' => '08:00',
             'end_date' => '2023-03-04',
             'end_time' => '09:00',
-            'result' => false
+            'result' => 201
         ],
         [
             'start_date' => '2023-03-04',
             'start_time' => '10:00',
             'end_date' => '2023-03-04',
             'end_time' => '12:00',
-            'result' => true
+            'result' => 400
         ],
         [
             'start_date' => '2023-03-04',
             'start_time' => '08:00',
             'end_date' => '2023-03-05',
             'end_time' => '09:00',
-            'result' => true
+            'result' => 400
         ],
         [
             'start_date' => '2023-03-06',
             'start_time' => '08:00',
             'end_date' => '2023-03-06',
             'end_time' => '09:00',
-            'result' => true
+            'result' => 400
         ],
         [
             'start_date' => '2023-03-10',
             'start_time' => '16:00',
             'end_date' => '2023-03-10',
             'end_time' => '18:00',
-            'result' => true
+            'result' => 400
         ],
         [
             'start_date' => '2023-03-10',
             'start_time' => '21:00',
             'end_date' => '2023-03-10',
             'end_time' => '22:00',
-            'result' => false
+            'result' => 201
+        ],
+        [
+            'start_date' => '2023-03-10',
+            'start_time' => '5:00',
+            'end_date' => '2023-03-11',
+            'end_time' => '01:00',
+            'result' => 400
         ],
         [
             'start_date' => '2023-03-10',
             'start_time' => '21:00',
             'end_date' => '2023-03-11',
-            'end_time' => '1:00',
-            'result' => false
+            'end_time' => '01:00',
+            'result' => 201
         ],
         [
             'start_date' => '2023-03-11',
             'start_time' => '10:00',
             'end_date' => '2023-03-11',
             'end_time' => '12:00',
-            'result' => false
+            'result' => 201
+        ],
+        [
+            'start_date' => '2023-03-11',
+            'start_time' => '10:01',
+            'end_date' => '2023-03-11',
+            'end_time' => '12:00',
+            'result' => 400
         ],
     ];
 
@@ -90,11 +118,7 @@ class BookingTest extends TestCase
 
         $this->delete('/api/bookings/' . $response->json('id'));
 
-        if ($data['result'] === false) {
-            $response->assertStatus(201);
-        } else {
-            $response->assertStatus(400);
-        }
+        $response->assertStatus($data['result']);
     }
 
     public function test02()
@@ -135,5 +159,25 @@ class BookingTest extends TestCase
     public function test09()
     {
         $this->doTest(self::mockData[8]);
+    }
+
+    public function test10()
+    {
+        $this->doTest(self::mockData[9]);
+    }
+
+    public function test11()
+    {
+        $this->doTest(self::mockData[10]);
+    }
+
+    public function test12()
+    {
+        $this->doTest(self::mockData[11]);
+    }
+
+    public function test13()
+    {
+        $this->doTest(self::mockData[12]);
     }
 }
