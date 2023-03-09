@@ -99,6 +99,13 @@ class BookingTest extends TestCase
             'end_time' => '12:00',
             'result' => 400
         ],
+        [
+            'start_date' => '2023-03-10',
+            'start_time' => '19:00',
+            'end_date' => '2023-03-10',
+            'end_time' => '20:00',
+            'result' => 201
+        ],
     ];
 
     public function test01()
@@ -179,5 +186,10 @@ class BookingTest extends TestCase
     public function test13()
     {
         $this->doTest(self::mockData[12]);
+    }
+
+    public function test14()
+    {
+        $this->doTest(self::mockData[13]);
     }
 }

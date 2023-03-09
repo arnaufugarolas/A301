@@ -20,3 +20,4 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 Route::resource('bookings', BookingController::class);
+Route::post('/availability', [BookingController::class, 'getAvailability']);

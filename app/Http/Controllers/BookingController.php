@@ -3,10 +3,36 @@
 namespace App\Http\Controllers;
 
 use App\Models\Booking;
+use Carbon\Carbon;
+use Carbon\CarbonInterval;
 use Carbon\Exceptions\InvalidDateException;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+
+class CollisionsRequest
+{
+
+    public $start_date;
+    public $start_time;
+    public $end_date;
+    public $end_time;
+
+    /**
+     * @param $start_date
+     * @param $start_time
+     * @param $end_date
+     * @param $end_time
+     */
+    public function __construct($start_date, $start_time, $end_date, $end_time)
+    {
+        $this->start_date = $start_date;
+        $this->start_time = $start_time;
+        $this->end_date = $end_date;
+        $this->end_time = $end_time;
+    }
+}
+
 
 // API Controller
 class BookingController extends Controller
@@ -41,7 +67,13 @@ class BookingController extends Controller
             return response()->json(['error' => $e->getMessage()], 400);
         }
         try {
-            $collisions = $this->checkCollisions($request);
+            $collisions = $this->checkCollisions(
+                new CollisionsRequest(
+                    $request->start_date,
+                    $request->start_time,
+                    $request->end_date,
+                    $request->end_time
+                ));
         } catch (Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
@@ -81,7 +113,7 @@ class BookingController extends Controller
         }
     }
 
-    public function checkCollisions(Request $request)
+    public function checkCollisions(CollisionsRequest $request)
     {
         $collisions = 0;
 
@@ -130,8 +162,16 @@ class BookingController extends Controller
             return response()->json(['error' => $e->getMessage()], 400);
         }
 
+        // TODO: Dont check himself for collisions
+
         try {
-            $collisions = $this->checkCollisions($request);
+            $collisions = $this->checkCollisions(
+                new CollisionsRequest(
+                    $request->start_date,
+                    $request->start_time,
+                    $request->end_date,
+                    $request->end_time
+                ));
         } catch (Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
@@ -161,5 +201,45 @@ class BookingController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
         return response()->json(['message' => 'Booking successfully deleted.'], 204);
+    }
+
+    public function getAvailability(Request $request)
+    {
+        try {
+            $this->validate($request, [
+                'start_date' => 'required|date',
+                'end_date' => 'required|date|after_or_equal:start_date',
+            ]);
+        } catch (Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+
+        $available = [];
+        $interval = CarbonInterval::hours();
+        $start = Carbon::parse($startDate);
+        $end = Carbon::parse($endDate)->addDay();
+
+        for ($date = $start; $date->lte($end); $date->add($interval)) {
+            try {
+                $isAvailable = !$this->checkCollisions(new CollisionsRequest(
+                    $date->copy()->sub($interval)->toDateString(),
+                    $date->copy()->sub($interval)->toTimeString(),
+                    $date->toDateString(),
+                    $date->toTimeString()
+                ));
+            } catch (Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+
+            if ($isAvailable) {
+                $available[] = $date->toDateTimeString();
+            }
+        }
+
+        // Return the list of available dates/times as JSON response
+        return response()->json(['available' => $available]);
     }
 }
