@@ -19,5 +19,11 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::resource('bookings', BookingController::class);
+const BOOKING_AND_ID = '/bookings/{id}';
+
+Route::get('/bookings', [BookingController::class, 'index']);
+Route::post('/bookings', [BookingController::class, 'store']);
+Route::get(BOOKING_AND_ID, [BookingController::class, 'show']);
+Route::put(BOOKING_AND_ID, [BookingController::class, 'update']);
+Route::delete(BOOKING_AND_ID, [BookingController::class, 'destroy']);
 Route::post('/availability', [BookingController::class, 'getAvailability']);

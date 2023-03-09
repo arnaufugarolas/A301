@@ -13,28 +13,22 @@ use Illuminate\Http\Request;
 class CollisionsRequest
 {
 
-    public $start_date;
-    public $start_time;
-    public $end_date;
-    public $end_time;
+    public mixed $start_date;
+    public mixed $start_time;
+    public mixed $end_date;
+    public mixed $end_time;
+    public mixed $id;
 
-    /**
-     * @param $start_date
-     * @param $start_time
-     * @param $end_date
-     * @param $end_time
-     */
-    public function __construct($start_date, $start_time, $end_date, $end_time)
+    public function __construct($start_date, $start_time, $end_date, $end_time, $id = null)
     {
         $this->start_date = $start_date;
         $this->start_time = $start_time;
         $this->end_date = $end_date;
         $this->end_time = $end_time;
+        $this->id = $id;
     }
 }
 
-
-// API Controller
 class BookingController extends Controller
 {
     public function index(): JsonResponse
@@ -94,7 +88,7 @@ class BookingController extends Controller
     /**
      * @throws Exception
      */
-    public function validateBookingRequest(Request $request): void
+    private function validateBookingRequest(Request $request): void
     {
         $request->validate([
             'start_date' => 'required|date',
@@ -113,25 +107,36 @@ class BookingController extends Controller
         }
     }
 
-    public function checkCollisions(CollisionsRequest $request)
+    private function checkCollisions(CollisionsRequest $request): bool
     {
         $collisions = 0;
 
         $collisions += count(Booking::where('start_date', '=', $request->start_date)
-            ->where('start_time', '<', $request->start_time)->get());
+            ->where('start_time', '<', $request->start_time)
+            ->whereNot('id', '=', $request->id)
+            ->get());
         $collisions += count(Booking::where('start_date', '=', $request->start_date)
             ->where('start_date', '=', $request->end_date)
             ->where('start_time', '>=', $request->start_time)
-            ->where('start_time', '<=', $request->end_time)->get());
+            ->where('start_time', '<=', $request->end_time)
+            ->whereNot('id', '=', $request->id)
+            ->get());
         $collisions += count(Booking::where('start_date', '=', $request->start_date)
             ->where('start_date', '<', $request->end_date)
+            ->whereNot('id', '=', $request->id)
             ->get());
         $collisions += count(Booking::where('end_date', '=', $request->start_date)
-            ->where('end_time', '>=', $request->start_time)->get());
+            ->where('end_time', '>=', $request->start_time)
+            ->whereNot('id', '=', $request->id)
+            ->get());
         $collisions += count(Booking::where('start_date', '>', $request->start_date)
-            ->where('start_date', '<', $request->end_date)->get());
+            ->where('start_date', '<', $request->end_date)
+            ->whereNot('id', '=', $request->id)
+            ->get());
         $collisions += count(Booking::where('start_date', '<', $request->start_date)
-            ->where('end_date', '>', $request->start_date)->get());
+            ->where('end_date', '>', $request->start_date)
+            ->whereNot('id', '=', $request->id)
+            ->get());
 
 
         return $collisions > 0;
@@ -162,15 +167,14 @@ class BookingController extends Controller
             return response()->json(['error' => $e->getMessage()], 400);
         }
 
-        // TODO: Dont check himself for collisions
-
         try {
             $collisions = $this->checkCollisions(
                 new CollisionsRequest(
                     $request->start_date,
                     $request->start_time,
                     $request->end_date,
-                    $request->end_time
+                    $request->end_time,
+                    $booking->id
                 ));
         } catch (Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -203,7 +207,7 @@ class BookingController extends Controller
         return response()->json(['message' => 'Booking successfully deleted.'], 204);
     }
 
-    public function getAvailability(Request $request)
+    public function getAvailability(Request $request): JsonResponse
     {
         try {
             $this->validate($request, [
